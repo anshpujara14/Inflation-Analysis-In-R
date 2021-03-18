@@ -1,0 +1,5 @@
+library(readxl)
+library(dplyr)
+data = read_excel("F:/eBooks/2020-21/WIN/EDA/Project/Inflation Analysis/inflation.xls")
+head(data)
+str(data)
