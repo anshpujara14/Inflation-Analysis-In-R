@@ -1,0 +1,510 @@
+---
+title: An R Markdown document converted from "F:/eBooks/2020-21/WIN/EDA/Project/Inflation
+  Analysis/food_demand_analysis.ipynb"
+output: html_document
+---
+
+# Review III - Food Demand Analysis
+# Prediction Using CatBoost
+## Ansh Pujara
+## 18BCE1103
+
+### Dataset Description
+
+
+Variable	Definition:
+<br>
+id -	Unique ID<br>
+week -	Week No<br>
+center_id -	Unique ID for fulfillment center<br>
+meal_id -	Unique ID for Meal<br>
+checkout_price -	Final price including discount, taxes & delivery charges<br>
+base_price -	Base price of the meal<br>
+emailer_for_promotion -	Emailer sent for promotion of meal<br>
+homepage_featured -	Meal featured at homepage<br>
+num_orders -	(Target) Orders Count<br>
+category -	Type of meal (beverages/snacks/soups….)<br>
+cuisine	- Meal cuisine (Indian/Italian/…)<br>
+city_code -	Unique code for city<br>
+region_code -	Unique code for region<br>
+center_type -	Anonymized center type<br>
+op_area -	Area of operation (in km^2)<br>
+
+<br>
+
+# Importing Libraries
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(car)
+library(funModeling)
+library(tidyverse)
+library(Hmisc)
+```
+
+```{r}
+# install.packages("funModeling")
+# install.packages("tidyverse")
+# install.packages("Hmisc")
+```
+
+# Importing Dataset
+
+```{r}
+train = read.csv('train.csv')
+fulfilment_centre = read.csv('fulfilment_center_info.csv')
+meal_info = read.csv('meal_info.csv')
+```
+
+```{r}
+head(train)
+```
+
+```{r}
+head(fulfilment_centre)
+```
+
+```{r}
+head(meal_info)
+```
+
+```{r}
+test = read.csv("test_QoiMO9B.csv")
+head(test)
+```
+
+# Processing Dataset
+
+### Merging dataframes based on 'meal_id' and 'center_id'
+
+```{r}
+train = merge(train, meal_info, by.x='meal_id', by.y='meal_id')
+train = merge(train, fulfilment_centre, by.x='center_id', by.y='center_id')
+test = merge(test, meal_info, by.x='meal_id', by.y='meal_id')
+test = merge(test, fulfilment_centre, by.x='center_id', by.y='center_id')
+```
+
+### Checking for null values
+
+```{r}
+cat("Null values in train: ", sum(is.na(train)))
+cat("\nNull values in test: ",sum(is.na(test)))
+```
+
+# Data Summary
+
+```{r}
+names(train)
+```
+
+```{r}
+str(train)
+```
+
+```{r}
+t(profiling_num(train))
+```
+
+### Categorical Data
+
+```{r}
+freq(train)
+```
+
+### Overall Data
+
+```{r}
+Hmisc::describe(train)
+```
+
+## Visualizations
+
+```{r}
+plot_num(train)
+```
+
+```{r}
+library(GGally)
+```
+
+```{r}
+plot(train$week, train$num_orders, xlab = "Week", ylab = "No. of orders", type = 'h')
+```
+
+```{r}
+plot(x = train$checkout_price, y = train$num_orders,xlab = "CheckoutPrice", ylab = "No. of orders",
+     main = "Checkout price vs No. of orders", col = "blue")
+```
+
+```{r}
+plot(x = train$city_code, y = train$num_orders,xlab = "CityCode", ylab = "No. of orders",
+     main = "City Code vs No. of orders", col = "blue")
+```
+
+```{r}
+boxplot(train$num_orders, col = "green")
+```
+
+### It is visible that the number of orders greater than 15000 are acting as outliers
+
+```{r}
+# Removing outliers for better analyasis
+train = train[train$num_orders < 15000, ]
+train
+```
+
+```{r}
+plot(x = train$center_id, y = train$num_orders,xlab = "CenterID", ylab = "No. of orders",
+     main = "CenterID vs No. of orders", col = "blue", type="h")
+```
+
+```{r}
+ggplot(data = train, mapping = aes(x = as.factor(category), y = num_orders, color=category)) +
+  geom_bar(stat = "identity") + 
+  labs(x = "Category", y = "No. of Orders") + ggtitle("Number of orders of a Category") + theme_minimal()
+```
+
+# Statistical Analysis
+
+## 1. Analysing trends in the type of cuisine ordered from any particular center
+
+## 2. Analysing trends in the centers from where most of the orders are collected
+
+```{r}
+library(graphics)
+```
+
+```{r}
+ggplot(data = train, mapping = aes(x = as.factor(cuisine), y = num_orders, color=cuisine)) +
+  geom_bar(stat = "identity") + 
+  labs(x = "Type of Cuisine", y = "No. of Orders") + ggtitle("Number of orders based on the type of Cuisine") + theme_minimal()
+```
+
+```{r}
+ggplot(data = train, mapping = aes(x = as.factor(center_type), y = num_orders, color=center_type)) +
+  geom_bar(stat = "identity") + 
+  labs(x = "Center Type", y = "No. of Orders") + ggtitle("Number of orders from a particular Center") + theme_minimal()
+```
+
+```{r}
+d1 = train[train$num_orders < 12000,]
+```
+
+```{r}
+ggline(d1, x="cuisine", y="num_orders", color = "center_type")
+```
+
+## Using Two-way ANOVA to analyse the effect of "center_type" and "cuisine" on "num_orders"
+
+   
+
+### Summary based on "cuisine"
+
+```{r}
+train %>%
+  group_by(cuisine) %>%
+  summarise(count = n(), mx=max(num_orders, na.rm=FALSE), min=min(num_orders, na.rm=FALSE), mn=mean(num_orders, na.rm=FALSE), std=sd(num_orders, na.rm=FALSE))
+```
+
+ 
+
+### Summary based on "center_type"
+
+```{r}
+train %>%
+  group_by(center_type) %>%
+  summarise(count = n(), mx=max(num_orders, na.rm=FALSE), min=min(num_orders, na.rm=FALSE), mn=mean(num_orders, na.rm=FALSE), std=sd(num_orders, na.rm=FALSE))
+```
+
+```{r}
+train %>%
+  group_by(center_type, category) %>%
+  summarise(count = n(), mx=max(num_orders, na.rm=FALSE), min=min(num_orders, na.rm=FALSE), mn=mean(num_orders, na.rm=FALSE), std=sd(num_orders, na.rm=FALSE))
+```
+
+### ANOVA test
+
+### Levene's test to check the common variance
+
+```{r}
+set.seed(100)
+d1 = sample_n(train, 100)
+```
+
+```{r}
+leveneTest(num_orders~center_type*cuisine, d1)
+```
+
+```{r}
+res = aov(num_orders~center_type*cuisine, train)
+summary(res)
+```
+
+#### As the p-value is less than 0.05 for "center_type", "cuisine" and their interaction, we conclude they are statistically significant.
+
+### Total number of cities and centers
+
+```{r}
+cat("Total number of cities", length(unique(train$city_code)))
+```
+
+```{r}
+cat("Total number of centers", length(unique(train$center_id)))
+```
+
+We observe some cities may have more than one centers
+
+### Center - Meal pairs in train and test dataset
+
+```{r}
+center_meal_train = (unique(paste(as.character(train$center_id) ,as.character(train$meal_id), sep="_")))
+cat("There are", length(center_meal_train), "center-meal pairs in the train dataset")
+```
+
+```{r}
+center_meal_test = (unique(paste(as.character(test$center_id) ,as.character(test$meal_id), sep="_")))
+cat("There are", length(center_meal_test), "center-meal pairs in the test dataset")
+```
+
+```{r}
+k = center_meal_train[!(unique(center_meal_train) %in% unique(center_meal_test))]
+```
+
+```{r}
+cat("There are", length(k), "new center-meal pairs in the train dataset")
+cat("\n",k)
+```
+
+Here, we observe 52 new centers in the test dataset which are not present in the train dataset
+
+There should be 77*51 = 3927 center-meal pair, but we have 3597 pairs in train data, that means some centers did not sell some of the meals.
+
+There should be 3597*145 = 521565 records in past 145 week data, but we have 456548 records. which means some centers did not sell some meal for some week or they stared selling some new type of meal after some weeks. Same with test data.
+
+Test set has only 3548 center-meal pair, that means some of the centers did not sell some type of meals in this 10 week.
+
+Here in the test set (future 10 week), center 73 started selling meal 2956 & 1571, center 92 started selling meal 2104, which they have never sold in last 145 weeks. There are only 13 records with unknown center-meal pair in test set.
+
+## 3. Analysing the regions that provides the maximum and minimum number of orders for a <br>particular cuisines
+
+```{r}
+train %>%
+  group_by(region_code, cuisine) %>%
+  summarise(count = n(), mx=max(num_orders, na.rm=FALSE), min=min(num_orders, na.rm=FALSE), mn=mean(num_orders, na.rm=FALSE), std=sd(num_orders, na.rm=FALSE))
+```
+
+### Total number of regions and operation areas
+
+```{r}
+cat("Total number of regions", length(unique(train$region_code)))
+```
+
+```{r}
+cat("Total number of operation areas", length(unique(train$op_area)))
+```
+
+```{r}
+ggplot(data = train, mapping = aes(x = as.factor(region_code), y = num_orders, color=region_code)) +
+  geom_bar(stat = "identity") + 
+  labs(x = "Region Code", y = "No. of Orders") + ggtitle("Number of orders from a particular Region") + theme_minimal()
+```
+
+```{r}
+ggplot(data = train, mapping = aes(x = as.factor(op_area), y = num_orders, color=op_area)) +
+  geom_bar(stat = "identity") + 
+  labs(x = "Operation Area", y = "No. of Orders") + ggtitle("Number of orders from a particular Area") + theme_minimal()
+```
+
+## Inference
+
+From the above we results we can conclude that centers A and B are the most busiest centers and the type of cuisine ordered most consists of Indian and Italian. Upon observing the category of cuisine, it shows that Beverages are the most ordered type of cuisine ordered within the 140 weeks provided.
+<br>
+Now we shall be looking at the other variables and try to predict the future sales for the upcoming 10 weeks.
+
+## Data preprocessing
+
+```{r}
+# train = train %>%
+#     mutate(train_or_test = 'train')
+
+# test = test %>%
+#     mutate(train_or_test = 'test')
+```
+
+```{r}
+train$num_orders = log(train$num_orders, base = exp(1))
+```
+
+```{r}
+# y = train$num_orders
+```
+
+```{r}
+# to_drop = "num_orders"
+# train = train[, !(names(train) %in% to_drop)]
+# head(train)
+```
+
+```{r}
+# total_data = rbind(train, test)
+```
+
+```{r}
+# total_data
+```
+
+```{r}
+train$checkout_price = log(train$checkout_price, base = exp(1))
+train$base_price = log(train$base_price, base = exp(1))
+
+test$checkout_price = log(test$checkout_price, base = exp(1))
+test$base_price = log(test$base_price, base = exp(1))
+```
+
+Adding a column "discounted_price" for better analysis of checkout price and base price
+
+```{r}
+train = train %>%
+    mutate(discounted_price = (base_price - checkout_price)/base_price)
+
+test = test %>%
+    mutate(discounted_price = (base_price - checkout_price)/base_price)
+```
+
+```{r}
+head(train)
+```
+
+```{r}
+head(test)
+```
+
+### Loading CatBoost and setting parameters for training
+
+```{r}
+library(catboost)
+```
+
+```{r}
+params <- list(iterations=3000,
+learning_rate=0.02,
+depth=10,
+loss_function='RMSE',
+eval_metric='RMSE',
+random_seed = 55,
+od_type='Iter',
+metric_period = 50,
+od_wait=20,
+use_best_model=TRUE,
+task_type='GPU')
+```
+
+```{r}
+k = sapply(dataset, class)
+```
+
+```{r}
+features = c()
+for(i in names(k)){
+    if(k[i] == 'character'){
+        features = append(features, i)
+    }
+}
+```
+
+```{r}
+features
+```
+
+### Splitting data into train and validation
+
+```{r}
+library(caret)
+set.seed(123)
+validation_index <- createDataPartition(train$id, p=0.80, list=FALSE)
+# select 20% of the data for validation
+validation <- train[-validation_index,]
+# use the remaining 80% of data to training and testing the models
+dataset <- train[validation_index,]
+```
+
+### Converting categorical features into factors then numerical
+
+```{r}
+for (i in c(10,11,13,14)){
+    dataset[,i] = as.numeric(factor(dataset[,i]))
+}
+dataset
+```
+
+```{r}
+for (i in c(10,11,13,14)){
+    validation[,i] = as.numeric(factor(validation[,i]))
+}
+validation
+```
+
+```{r}
+for (i in c(9,10,12,13)){
+    test[,i] = as.numeric(factor(test[,i]))
+}
+head(test)
+```
+
+```{r}
+library(dplyr)
+y_train <- unlist(dataset[c('num_orders')])
+X_train <- dataset %>% select(-num_orders)
+y_valid <- unlist(validation[c('num_orders')])
+X_valid <- validation %>% select(-num_orders)
+```
+
+```{r}
+head(X_valid)
+```
+
+### Training the model
+
+```{r}
+train_pool <- catboost.load_pool(data = X_train, label = y_train)
+test_pool <- catboost.load_pool(data = X_valid, label = y_valid)
+```
+
+```{r}
+model <- catboost.train(train_pool, params = params)
+```
+
+```{r}
+prediction <- catboost.predict(model, 
+                               test_pool)
+```
+
+```{r}
+prediction
+```
+
+```{r}
+catboost.save_model(model, 'model1')
+```
+
+```{r}
+# install.packages("Metrics")
+```
+
+```{r}
+library(Metrics)
+result = rmse(y_valid, prediction) 
+  
+print(result)  
+```
+
+## Inference
+
+The value of evaluation metric <b>RMSE</b> for 
+<ol> 
+    <li>2000 iterations - 0.493352</li>
+    <li>3000 iterations - 0.4741385</li>
+</ol>
+

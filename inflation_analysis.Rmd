@@ -1,0 +1,228 @@
+---
+title: "Analyzing Global Inflation Rates"
+output: html_notebook
+---
+
+#### This project will aim at analyzing the inflation rates globally and countrywise over time from 1980 onwards.
+
+Loading the required packages
+
+```{r}
+require(ggplot2)
+require(dplyr)
+require(tidyr)
+
+```
+
+Reading the datset.
+
+```{r}
+library(readxl)
+inflation <- read_excel("F:/eBooks/2020-21/WIN/EDA/Project/Inflation Analysis/inflation.xls")
+View(inflation)
+
+
+```
+
+Starting with some data processing and transformations as well as cleaning.
+
+```{r}
+head(inflation)
+
+```
+
+The data set is quiet wide. So I will gather the dataset and make Year as a seaparate column and the inflation rates of each year separate for easy analysis and visualization of data.
+
+```{r}
+#using gather() function from tidyr
+
+year<-c(1980:2022) #making a vector consisting of all years
+year<-as.character(year)#converting to character type to use in gather()
+
+#new dataframe which is in long format
+inf<-inflation %>% gather(year,key = "Year",value="InflationRate")
+inf<-na.omit(inf) #omitting NA values
+
+names(inf)<-c("region","year","inflation")
+
+inf$year<-as.integer(inf$year)
+
+```
+
+Now what we can do is easily filter the data for specific countries and make a separate data frame for them and analyze their inflation rates over time specifically and perform time series analysis.
+
+------------------------------------------------------------------------
+
+### Inflation Rates in India
+
+Generating a data frame for India and other major emerging and developed economies.
+
+```{r}
+
+changeType<-function(df,x) 
+{
+  
+  df[,x]<-as.integer(df[,x])
+}
+
+India<-filter(inf,region=="India")
+India$inflation<-as.numeric(India$inflation)
+India$year<-as.numeric(India$year)
+
+China<-filter(inf,region=="China, People's Republic of")
+China[1,3]<-0
+
+
+Ger<-filter(inf,region=="Germany")
+changeType(Ger,3)
+
+
+Japan<-filter(inf,region=="Japan")
+changeType(Japan,year,inflationRate)
+
+US<-filter(inf,region=="United States")
+EU<-filter(inf,region=="European Union")
+UK<-filter(inf,region=="United Kingdom")
+Fr<-filter(inf,region=="France")
+uae<-filter(inf,region=="United Arab Emirates")
+
+
+theme_set(theme_bw()  )
+ggplot(aes(x=year,y=inflation),data=India) +
+  geom_point(size=2,color="orange") + 
+  geom_line(color="orange") +
+  scale_x_continuous(limits=c(1980,2017),breaks=seq(1980,2017,5)) +
+  labs(x="Year",y="Inflation Rates",title="Time series of Inflation Rates for India")
+
+#hchart(India, "line", hcaes(x = year, y = inflation))
+                
+
+
+
+```
+
+First let's build a small R function to easily plot time series plots for visualizing the inflation rates over time.
+
+```{r}
+#making a ggplot function to plot timer series plots
+tsplot<-function(df,year,rate,pcol,lcol,title) {
+  
+  
+  ggplot(aes(x = year,y= rate),data=df) +
+  geom_point(size=2,color=pcol) + 
+  geom_line(color=lcol) +
+  scale_x_continuous(limits=c(1980,2017),breaks=seq(1980,2017,5)) +
+  labs(title=title)
+    
+}
+
+```
+
+The function above takes a data set as argument folllowed by x-axis attribute , y-axis attribute and then the other plotting variables i.e point and line color and title.
+
+------------------------------------------------------------------------
+
+### Analyzing Inflation rates in Euro region-EU economic integration
+
+```{r}
+EU$inflation<-as.numeric(EU$inflation)
+tsplot(EU,EU$year,EU$inflation,"#908B0A","#908B0A","Inflation Rates for EU region")
+
+
+```
+
+### Analyzing Inflation Rates in USA
+
+Checking inflation rates for United states of America over time.
+
+```{r}
+
+US$inflation<-as.numeric(US$inflation)
+theme_set(theme_bw())
+tsplot(US,US$year,US$inflation,"purple","brown","Inflation Rates for USA over time")
+
+```
+
+In the above plot we can observe that the *inflation* for year **2009 is negetive** and negetive inflation is also called **deflation** which is more harmful for an economy than inflation. It is negetive due to that fact that in 2008-2009 their economy faced a **recession**. High deflation rates signify that the economy is under recession i.e demand of goods have gone down significantly, resulting in very low price of goods. Layoffs in jobs and decrease in wages of employees, high unemployment etc are some examples of how recession affects an economy.
+
+------------------------------------------------------------------------
+
+### Analyzing Inflation rates for German Economy
+
+```{r}
+Ger$inflation<-as.numeric(Ger$inflation)
+theme_set(theme_bw())
+tsplot(Ger,Ger$year,Ger$inflation,"purple","purple","Inflation Rates of Germany")
+
+```
+
+------------------------------------------------------------------------
+
+### United Kingdom
+
+```{r}
+UK$inflation<-as.numeric(UK$inflation)
+tsplot(UK,UK$year,UK$inflation,"#54A50D","#54A50D","Inflation Rates for United Kingdom")
+
+```
+
+------------------------------------------------------------------------
+
+### France
+
+```{r}
+Fr$inflation<-as.numeric(Fr$inflation)
+theme_set(theme_bw())
+tsplot(Fr,Fr$year,Fr$inflation,"#FD5D01","#FD5D01","Inlfation rates for France")
+
+```
+
+------------------------------------------------------------------------
+
+### China
+
+```{r}
+China$inflation<-as.numeric(China$inflation)
+theme_set(theme_bw())
+tsplot(China,China$year,China$inflation,"#078CE5","#078CE5","Inflation Rates for China")
+
+```
+
+We can notice that China had very high inflation rates initially,before 1997. High inflation can be caused by an increase in demand for goods relative to supply. When more people fight over fewer goods, the price increases. It is just as true for an entire country as it is for a car on eBay. We have seen an increase in the inflation rate, in part, because countries like China and India, which had virtually no industrial base a few generations ago, have billions of citizens poised to enter the middle class in the coming years
+
+Then it has negetive inflation rates for years 1998-1999, 2002, 2009 i.e had high deflation.
+
+------------------------------------------------------------------------
+
+### UAE
+
+```{r}
+uae$inflation<-as.numeric(uae$inflation)
+tsplot(uae,uae$year,uae$inflation,"#0A2E90","#0A2E90","Inflation Rates for UAE")
+
+
+```
+
+------------------------------------------------------------------------
+
+### Plotting the comparative Time series plot
+
+We will use the package **highcharter**.
+
+```{r}
+require(highcharter)
+
+hc <- highchart() %>% 
+  hc_xAxis(title="Year",inf$year) %>% 
+  hc_add_series(name = "India", data = India$inflation) %>% 
+  hc_add_series(name = "USA", data = US$inflation) %>%
+  hc_add_series(name = "UK", data = UK$inflation) %>%
+  hc_add_series(name = "China", data = China$inflation) %>%
+  hc_add_series(name = "Ger", data = Ger$inflation) %>%
+  hc_yAxis(title="Inflation Rates ")%>%
+  #to add colors
+  hc_colors(c("red","blue","green","purple","yellow"))
+
+hc
+
+```
